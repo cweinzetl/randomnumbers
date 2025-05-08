@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>"Random Numbers" Calculator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            background-color: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, button {
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9f7ef;
+            border-radius: 4px;
+            display: none;
+        }
+        .station {
+            font-family: monospace;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+        .explanation {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .warning {
+            color: #d9534f;
+            font-weight: bold;
+        }
+
+        div .station {
+            font-size: 3em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>"Random Numbers" Calculator</h1>
+        
+        <div class="form-group">
+            <label for="startStation">Starting Station (e.g., 12+00):</label>
+            <input type="text" id="startStation" placeholder="12+00" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="endStation">Ending Station (e.g., 20+50):</label>
+            <input type="text" id="endStation" placeholder="20+50" required>
+        </div>
+        
+        <div class="form-group">
+            <label for="randomValues">Random Values:</label>
+            <input type="text" id="randomValues" placeholder="0.234, 0.536, 0.1, ..." value="0.317,0.123,0.925,0.396,0.833,0.473,0.086">
+        </div>
+        
+        <button id="generateBtn">Generate Test Stations</button>
+        
+        <div id="results">
+            <h3>Generated Test Stations:</h3>
+            <div id="stationList"></div>
+            <table id="resultsTable">
+                <thead>
+                    <tr>
+                        <th>Test #</th>
+                        <th>Random Value</th>
+                        <th>Offset</th>
+                        <th>Before Rounding</th>
+                        <th>Station</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <script>
+        document.getElementById('generateBtn').addEventListener('click', function() {
+            // Get input values
+            const startStation = document.getElementById('startStation').value.trim();
+            const endStation = document.getElementById('endStation').value.trim();
+            const randomValuesStr = document.getElementById('randomValues').value.trim();
+            
+            // Validate inputs
+            if (!startStation || !endStation || !randomValuesStr) {
+                alert('Please fill in all fields');
+                return;
+            }
+            
+            try {
+                // Parse stations to feet
+                const startFeet = parseStation(startStation);
+                const endFeet = parseStation(endStation);
+                
+                if (startFeet >= endFeet) {
+                    alert('End station must be greater than start station');
+                    return;
+                }
+                
+                // Parse random values and ensure they're >= 0.086
+                const randomValues = randomValuesStr.split(',')
+                    .map(val => {
+                        let num = parseFloat(val.trim());
+                        if (isNaN(num)) return null;
+                        // Adjust values below 0.086 to prevent stations being too close
+                        return Math.max(num, 0.086);
+                    })
+                    .filter(val => val !== null && val <= 1.0);
+                
+                if (randomValues.length === 0) {
+                    alert('Please enter valid random values between 0.086 and 1.0');
+                    return;
+                }
+                
+                // Calculate total length
+                const totalLength = endFeet - startFeet;
+                
+                // Determine number of tests (length ÷ 250, rounded up)
+                const numTests = Math.ceil(totalLength / 250);
+                
+                // Calculate section length
+                const sectionLength = totalLength / numTests;
+                
+                // Generate test stations
+                const testStations = [];
+                const testDetails = [];
+                const usedRandomIndices = new Set();
+                const usedStations = new Set();
+                
+                // Start with the initial station as our base
+                let currentFeet = startFeet;
+                
+                // Ensure we don't use more random values than available
+                const maxTests = Math.min(numTests, randomValues.length);
+                
+                for (let i = 1; i <= maxTests; i++) {
+                    // Find a random index we haven't used yet
+                    let randomIndex;
+                    let attempts = 0;
+                    const maxAttempts = randomValues.length * 2;
+                    
+                    do {
+                        randomIndex = Math.floor(Math.random() * randomValues.length);
+                        attempts++;
+                        if (attempts > maxAttempts) {
+                            // If we can't find a unique station after many attempts, give up
+                            randomIndex = -1;
+                            break;
+                        }
+                    } while (usedRandomIndices.has(randomIndex));
+                    
+                    if (randomIndex === -1) break;
+                    
+                    usedRandomIndices.add(randomIndex);
+                    let randomValue = randomValues[randomIndex];
+                    
+                    // Calculate offset (ensure minimum spacing)
+                    let offset = sectionLength * randomValue;
+                    
+                    // Calculate next station in feet before rounding
+                    let nextFeet = startFeet + (sectionLength * (i-1)) + offset;
+                    
+                    // Round to nearest quarter station (25 feet)
+                    let roundedFeet = Math.round(nextFeet / 25) * 25;
+                    
+                    // Ensure we don't go past the end station
+                    if (roundedFeet > endFeet) {
+                        break;
+                    }
+                    
+                    // Ensure station is unique
+                    const stationKey = formatStation(roundedFeet);
+                    if (usedStations.has(stationKey)) {
+                        // If station already exists, adjust the random value upwards
+                        randomValue = Math.min(randomValue + 0.1, 1.0);
+                        offset = sectionLength * randomValue;
+                        nextFeet = currentFeet + offset;
+                        roundedFeet = Math.round(nextFeet / 25) * 25;
+                    }
+                    
+                    // Final check for uniqueness and range
+                    if (!usedStations.has(formatStation(roundedFeet)) && roundedFeet <= endFeet) {
+                        // Add to results
+                        testStations.push(formatStation(roundedFeet));
+                        testDetails.push({
+                            testNum: i,
+                            randomValue: randomValue.toFixed(3),
+                            offset: Math.round(offset),
+                            beforeRounding: formatStation(Math.round(nextFeet)),
+                            station: formatStation(roundedFeet)
+                        });
+                        
+                        // Track used stations
+                        usedStations.add(formatStation(roundedFeet));
+                        
+                        // Update current feet for next iteration
+                        currentFeet = roundedFeet;
+                    }
+                }
+                
+                // Display results
+                displayResults(testStations, testDetails, numTests, sectionLength);
+                
+            } catch (e) {
+                alert('Error: ' + e.message);
+                console.error(e);
+            }
+        });
+        
+        function parseStation(stationStr) {
+            // Convert station format (e.g., "12+00") to feet (1200)
+            const parts = stationStr.split('+');
+            if (parts.length !== 2) {
+                throw new Error('Invalid station format. Use format like "12+00"');
+            }
+            
+            const station = parseInt(parts[0]);
+            const offset = parseInt(parts[1]);
+            
+            if (isNaN(station)) {
+                throw new Error('Invalid station number');
+            }
+            
+            if (isNaN(offset) || offset < 0 || offset >= 100) {
+                throw new Error('Offset must be between 00 and 99');
+            }
+            
+            return (station * 100) + offset;
+        }
+        
+        function formatStation(feet) {
+            // Convert feet back to station format (e.g., 1215 → "12+15")
+            const station = Math.floor(feet / 100);
+            const offset = feet % 100;
+            return station + '+' + (offset < 10 ? '0' + offset : offset);
+        }
+        
+        function displayResults(stations, details, numTests, sectionLength) {
+            const resultsDiv = document.getElementById('results');
+            const stationListDiv = document.getElementById('stationList');
+            const tableBody = document.querySelector('#resultsTable tbody');
+            
+            stationListDiv.innerHTML = '';
+            tableBody.innerHTML = '';
+            
+            if (stations.length === 0) {
+                stationListDiv.innerHTML = '<p>No stations generated</p>';
+            } else {
+                // Display simple list
+                stations.forEach(station => {
+                    const stationDiv = document.createElement('div');
+                    stationDiv.className = 'station';
+                    stationDiv.textContent = station;
+                    stationListDiv.appendChild(stationDiv);
+                });
+                
+                // Display detailed table
+                details.forEach(detail => {
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td>${detail.testNum}</td>
+                        <td>${detail.randomValue}</td>
+                        <td>${detail.offset} ft</td>
+                        <td>${detail.beforeRounding}</td>
+                        <td><strong>${detail.station}</strong></td>
+                    `;
+                    
+                    tableBody.appendChild(row);
+                });
+                
+                // Add summary
+                const summary = document.createElement('p');
+                summary.innerHTML = `<strong>Summary:</strong> ${stations.length} test stations generated (of ${numTests} possible). Section length: ${Math.round(sectionLength)} feet.`;
+                stationListDiv.appendChild(summary);
+                
+                // Show warning if we couldn't generate all requested tests
+                if (stations.length < numTests) {
+                    const warning = document.createElement('p');
+                    warning.className = 'warning';
+                    warning.textContent = `Warning: Only generated ${stations.length} of ${numTests} requested tests (insufficient random values or space).`;
+                    stationListDiv.appendChild(warning);
+                }
+            }
+            
+            resultsDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
